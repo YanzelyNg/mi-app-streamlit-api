@@ -2,8 +2,8 @@ import streamlit as st
 import google.generativeai as genai
 from PIL import Image  # Librería para manejar imágenes en Python
 
-# --- 1. CONFIGURACIÓN INICIAL (Explicación para el taller) ---
-# st.secrets['GOOGLE_API_KEY'] busca la llave que guardamos en la "caja fuerte" de Streamlit Cloud.
+# --- 1. CONFIGURACIÓN INICIAL ---
+# st.secrets['GOOGLE_API_KEY'] busca la llave que guardamos en el Setting de Streamlit Cloud.
 if "GOOGLE_API_KEY" in st.secrets:
     genai.configure(api_key=st.secrets["GOOGLE_API_KEY"])
 else:
@@ -23,11 +23,11 @@ if uploaded_file is not None:
     # Convertimos el archivo subido en un objeto de imagen de Python (PIL)
     image = Image.open(uploaded_file)
     # st.image la muestra en la pantalla de la app
-    st.image(image, caption='Imagen subida', use_column_width=True)
+    st.image(image, caption='Imagen cargada', use_column_width=True)
     
     # --- 4. EL BOTÓN DE ACCIÓN ---
     if st.button("Contar Objetos"):
-        with st.spinner("Gemini está analizando la imagen..."):
+        with st.spinner("Analizando la imagen..."):
             try:
                 # --- 5. CONECTANDO CON GEMINI ---
                 # Usamos gemini-1.5-flash porque es el más rápido para visión artificial.
@@ -50,7 +50,14 @@ if uploaded_file is not None:
                 st.write(response.text)
                 
             except Exception as e:
-                st.error(f"Ocurrió un error técnico: {e}")
+                # Si sale error de modelo, intentamos con la ruta completa
+                st.warning("Reintentando con ruta alternativa...")
+                try:
+                    model_alt = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
+                    response = model_alt.generate_content([prompt, image])
+                    st.write(response.text)
+                except Exception as e_alt:
+                    st.error(f"Error: {e_alt}")
 
 else:
     st.info("👆 Por favor, sube una imagen para comenzar.")
