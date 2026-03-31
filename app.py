@@ -23,7 +23,8 @@ if uploaded_file is not None:
     # Convertimos el archivo subido en un objeto de imagen de Python (PIL)
     image = Image.open(uploaded_file)
     # st.image la muestra en la pantalla de la app
-    st.image(image, caption='Imagen cargada', use_column_width=True)
+    image1 = image.resize((300, 300))
+    st.image(image1, caption='Imagen cargada', use_column_width=True)
     
     # --- 4. EL BOTÓN DE ACCIÓN ---
     if st.button("Contar Objetos"):
@@ -42,7 +43,6 @@ if uploaded_file is not None:
                 
                 # --- 6. ENVIANDO DATOS A LA API ---
                 # Enviamos una lista que contiene el texto (prompt) y la imagen.
-                # ¡Es así de simple gracias a la multimodalidad!
                 response = model.generate_content([prompt, image])
                 
                 # --- 7. MOSTRAR EL RESULTADO ---
