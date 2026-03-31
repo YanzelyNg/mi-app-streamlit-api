@@ -50,14 +50,7 @@ if uploaded_file is not None:
                 st.write(response.text)
                 
             except Exception as e:
-                # Si sale error de modelo, intentamos con la ruta completa
-                st.warning("Reintentando con ruta alternativa...")
-                try:
-                    model_alt = genai.GenerativeModel(model_name="models/gemini-1.5-flash")
-                    response = model_alt.generate_content([prompt, image])
-                    st.write(response.text)
-                except Exception as e_alt:
-                    st.error(f"Error: {e_alt}")
+                st.error(f"Error: {e}")
 
 else:
     st.info("👆 Por favor, sube una imagen para comenzar.")
