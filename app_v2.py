@@ -10,7 +10,7 @@ else:
     st.error("⚠️ Falta configurar la GOOGLE_API_KEY en los Secrets de Streamlit.")
     st.stop() # Detiene la ejecución si no hay llave
 
-st.set_page_config(page_title="IA Contadora", page_icon="🔢")
+st.set_page_config(page_title="IA a tu Servicio", page_icon="🔢")
 st.title("🔢 Contador de Objetos con IA")
 st.write("Sube una foto y te contaré qué hay en ella.")
 
