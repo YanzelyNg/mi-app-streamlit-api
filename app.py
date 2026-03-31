@@ -31,7 +31,7 @@ if uploaded_file is not None:
             try:
                 # --- 5. CONECTANDO CON GEMINI ---
                 # Usamos gemini-1.5-flash porque es el más rápido para visión artificial.
-                model = genai.GenerativeModel("gemini-1.5-flash")
+                model = genai.GenerativeModel("gemini-2.5-flash")
                 
                 # Este es el 'PROMPT': la instrucción específica para la IA.
                 prompt = """
