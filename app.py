@@ -76,13 +76,17 @@ elif option == 'Audio (Transcripción)':
     
     if uploaded_audio:
         st.audio(uploaded_audio)
-        st.subheader("Análisis de la Señal de Entrada")
         # Datos del audio
-        col1, col2 = st.columns(2)
-        with col1:
-            st.metric("Formato", uploaded_audio.type)
-        with col2:
-            st.metric("Tamaño", f"{uploaded_audio.size / 1024:.2f} KB")
+        with st.expander("📊 Datos de la Señal de Entrada del Audio"):
+            st.write(f"Formato: {uploaded_audio.type}")
+            st.write(f"Tamaño: {uploaded_audio.size / 1024:.2f} KB")
+
+        
+        #col1, col2 = st.columns(2)
+        #with col1:
+        #    st.metric("Formato", uploaded_audio.type)
+        #with col2:
+        #    st.metric("Tamaño", f"{uploaded_audio.size / 1024:.2f} KB")
             
         # Explicación técnica para el taller:
         st.caption("Nota: La señal se digitaliza y se envía como un flujo de bytes codificados en Base64 hacia los tensores del modelo Gemini.")
