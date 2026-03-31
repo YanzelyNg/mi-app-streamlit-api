@@ -60,5 +60,30 @@ if option == 'Imagen (Contador)':
               except Exception as e:
                   st.error(f"Error: {e}")
 
+# --- LÓGICA PARA AUDIO (Lo nuevo) ---
+elif option == 'Audio (Transcripción)':
+    uploaded_audio = st.file_uploader("Sube un audio corto 10 seg máximo", type=["mp3", "wav", "m4a"])
+    
+    if uploaded_audio:
+        st.audio(uploaded_audio)
+        
+        if st.button("Escuchar y Transcribir"):
+            with st.spinner("La IA está escuchando..."):
+                try:
+                    # LEER EL AUDIO: Convertimos el archivo de Streamlit a bytes
+                    audio_bytes = uploaded_audio.read()
+                    
+                    # ENVIAR A GEMINI:
+                    # Pasamos el prompt y un diccionario con los datos del audio
+                    response = model.generate_content([
+                        "Transcribe este audio textualmente y luego haz un resumen de 3 puntos clave.",
+                        {"mime_type": "audio/mp3", "data": audio_bytes}
+                    ])
+                    
+                    st.subheader("Transcripción y Resumen:")
+                    st.info(response.text)
+                except Exception as e:
+                    st.error(f"Error en el audio: {e}")
+
 else:
     st.info("👆 Por favor, sube una imagen para comenzar.")
