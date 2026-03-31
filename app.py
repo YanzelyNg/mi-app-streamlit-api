@@ -36,6 +36,11 @@ if option == 'Imagen (Contador)':
       image = Image.open(uploaded_file)
       # st.image la muestra en la pantalla de la app
       st.image(image, caption='Imagen cargada', use_column_width=True)
+
+      with st.expander("📊 Datos Técnicos de la Matriz (Señal Visual)"):
+        st.write(f"Dimensiones de la matriz (Píxeles): {image_array.shape}")
+        st.write(f"Valor Máximo de Intensidad: {image_array.max()}")
+        st.write(f"Valor Mínimo de Intensidad: {image_array.min()}")
       
       
       # ---  EL BOTÓN DE ACCIÓN ---
