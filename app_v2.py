@@ -12,7 +12,7 @@ else:
 
 st.set_page_config(page_title="IA Contadora", page_icon="🔢")
 st.title("🔢 Contador de Objetos con IA")
-st.write("Sube una foto y Gemini contará qué hay en ella.")
+st.write("Sube una foto y te contaré qué hay en ella.")
 
 # --- 2. EL CARGADOR DE ARCHIVOS (Explicación para el taller) ---
 # st.file_uploader crea el botón para subir archivos. Limitamos a imágenes.
