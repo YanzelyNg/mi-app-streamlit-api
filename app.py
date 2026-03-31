@@ -34,7 +34,7 @@ if option == 'Imagen (Contador)':
       # Convertimos el archivo subido en un objeto de imagen de Python (PIL)
       image = Image.open(uploaded_file)
       # st.image la muestra en la pantalla de la app
-      st.image(image1, caption='Imagen cargada', use_column_width=True)
+      st.image(image, caption='Imagen cargada', use_column_width=True)
       
       
       # ---  EL BOTÓN DE ACCIÓN ---
