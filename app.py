@@ -20,6 +20,8 @@ option = st.sidebar.selectbox(
     ('Imagen (Contador)', 'Audio (Transcripción)')
 )
 
+# --- CONECTANDO CON GEMINI ---
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 if option == 'Imagen (Contador)':
   st.write("Sube una foto y te contaré qué hay en ella.")
@@ -28,19 +30,20 @@ if option == 'Imagen (Contador)':
   uploaded_file = st.file_uploader("Elige una imagen...", type=["jpg", "jpeg", "png"])
   
   if uploaded_file is not None:
-      # --- 3. MOSTRAR LA IMAGEN EN LA APP ---
+      # ---  MOSTRAR LA IMAGEN EN LA APP ---
       # Convertimos el archivo subido en un objeto de imagen de Python (PIL)
       image = Image.open(uploaded_file)
       # st.image la muestra en la pantalla de la app
       st.image(image1, caption='Imagen cargada', use_column_width=True)
       
-      # --- 4. EL BOTÓN DE ACCIÓN ---
+      
+      # ---  EL BOTÓN DE ACCIÓN ---
       if st.button("Contar Objetos"):
           with st.spinner("Analizando la imagen..."):
               try:
                   # --- 5. CONECTANDO CON GEMINI ---
                   # Usamos gemini-1.5-flash porque es el más rápido para visión artificial.
-                  model = genai.GenerativeModel("gemini-2.5-flash")
+                  #model = genai.GenerativeModel("gemini-2.5-flash")
                   
                   # Este es el 'PROMPT': la instrucción específica para la IA.
                   prompt = """
