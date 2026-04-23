@@ -155,58 +155,77 @@ elif option == 'Video (Análisis)':
                    f"Intervalo automático: cada {interval} frames. "
                    f"**{frames_to_analyze} requests** a Gemini.")
             
-            # 6. CONFIRMACIÓN DEL USUARIO
-            if st.button(f"✅ Confirmar: Procesar {frames_to_analyze} frames (máx 5)", type="primary"):
-                with st.spinner("Procesando frames..."):
+            # 6. CONFIRMACIÓN FINAL
+            if st.button(f"🚀 CONFIRMAR: Enviar {frames_to_analyze} frames a Gemini", type="primary"):
+                st.info("🎯 Iniciando procesamiento DEBUG...")
+                
+                with st.spinner("Analizando frames con Gemini..."):
                     try:
-                        results = []           # Lista para guardar descripciones
-                        frame_count = 0        # Contador global de frames
-                        analyzed_count = 0     # Contador de frames ANALIZADOS
+                        results = []
+                        frame_count = 0
+                        analyzed_count = 0
                         
-                        # 7. LOOP PRINCIPAL: LEER FRAME POR FRAME
+                        st.markdown("### 🐛 DEBUG en Vivo:")
+                        
+                        # 7. LOOP PRINCIPAL CON DEBUG
                         while cap.isOpened() and analyzed_count < max_frames:
-                            ret, frame = cap.read()  # Lee frame (ret=True si OK)
+                            ret, frame = cap.read()
                             if not ret:
+                                st.write("**DEBUG: ✅ Fin del video**")
                                 break
-                                
-                            # ¿Es este frame para analizar? (cada 'interval' frames)
+                            
+                            # ¿PROCESAR ESTE FRAME?
                             if frame_count % interval == 0 and analyzed_count < max_frames:
-                                # CONVERTIR FRAME PARA GEMINI
-                                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # BGR→RGB
-                                image = Image.fromarray(frame_rgb)                  # PIL Image
+                                st.write(f"**Frame {frame_count}:** Enviando a Gemini...")
                                 
-                                # LLAMADA A GEMINI (1 request por frame)
-                                prompt = "Describe brevemente qué hay en esta escena."
+                                # CONVERTIR PARA GEMINI
+                                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                                image = Image.fromarray(frame_rgb)
+                                
+                                prompt = "Describe brevemente qué hay en esta escena del video."
+                                
+                                # LLAMADA A GEMINI
+                                st.write("⏳ Esperando respuesta Gemini...")
                                 response = model.generate_content([prompt, image])
                                 
-                                # GUARDAR RESULTADO CON TIMESTAMP
-                                results.append(f"Frame {frame_count} ({frame_count/fps:.1f}s): {response.text}")
+                                # MOSTRAR RESULTADO INMEDIATO
+                                result_text = response.text
+                                st.write(f"**✅ Gemini:** {result_text}")
                                 
+                                # GUARDAR CON INFO
+                                results.append(f"⏰ Frame {frame_count} ({frame_count/fps:.1f}s): {result_text}")
                                 analyzed_count += 1
-                                st.status_update(f"Procesado: {analyzed_count}/{max_frames}")
+                                
+                                st.success(f"📈 Progreso: {analyzed_count}/{max_frames}")
                             
-                            frame_count += 1  # Siguiente frame
+                            frame_count += 1
                         
-                        # 8. LIMPIEZA DE MEMORIA Y DISCO
-                        cap.release()  # Libera VideoCapture
+                        st.balloons()  # 🎈 Celebración!
                         
-                        # BORRAR ARCHIVO TEMPORAL (IMPORTANTE en Cloud)
-                        os.unlink(tfile.name)  # Elimina /tmp/tmpXYZ.mp4
-                        
-                        # 9. MOSTRAR RESULTADOS
-                        st.success(f"✅ Análisis completado: {len(results)} frames procesados.")
-                        st.subheader("Resultados del video:")
-                        for r in results:
-                            st.write(r)
-                            
                     except Exception as e:
-                        st.error(f"Error en video: {e}")
-                        # LIMPIEZA EN CASO DE ERROR
+                        st.error(f"💥 **ERROR:** {str(e)}")
+                        st.write(f"**Tipo:** {type(e).__name__}")
+                        st.write("**Traceback:** Revisa logs de Streamlit Cloud")
+                        
+                        # LIMPIEZA EMERGENCIA
                         cap.release()
                         import os
                         os.unlink(tfile.name)
-        else:
-            st.info("👆 Haz clic en 'Analizar Video' para preview.")
-
+                        st.stop()
+                
+                # 8. SIEMPRE LIMPIAR
+                cap.release()
+                os.unlink(tfile.name)
+                st.success("🧹 Archivo temporal eliminado.")
+                
+                # 9. RESULTADOS FINALES
+                st.markdown("---")
+                st.subheader("🎥 RESUMEN FINAL")
+                if results:
+                    for i, result in enumerate(results, 1):
+                        st.markdown(f"**{i}.** {result}")
+                    st.balloons()
+                else:
+                    st.warning("⚠️ No se procesaron frames. Revisa DEBUG arriba.")
 else:
     st.info("👆 Por favor, sube una imagen para comenzar.")
