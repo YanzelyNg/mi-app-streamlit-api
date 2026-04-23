@@ -5,6 +5,7 @@ import numpy as np
 import cv2 # Librería para Procesamiento Imagenes y Videos
 import tempfile #Librería para crear archivos temporales en disco
 import os # Importa módulo para operaciones de archivos (sistema operativo)
+import time # Para sleep quota retry
 
 # --- CONFIGURACIÓN INICIAL ---
 # st.secrets['GOOGLE_API_KEY'] busca la llave que guardamos en el Setting de Streamlit Cloud.
@@ -116,12 +117,14 @@ elif option == 'Audio (Transcripción)':
 # --- LÓGICA PARA VIDEO (Lo nuevo) ---
 # --- VIDEO CON SESSION STATE (SOLUCIONA BOTONES ANIDADOS) ---
 # --- VIDEO CON SESSION STATE (V2 - CORREGIDO) ---
+# --- VIDEO CON RETRY QUOTA (COMPLETO) ---
+# --- VIDEO CON RETRY QUOTA (COMPLETO) ---
 elif option == 'Video (Análisis)':
     # INICIALIZAR SESSION STATE
     if 'video_step' not in st.session_state:
         st.session_state.video_step = 'upload'
     
-    st.write("🎥 Análisis Video - Máx 5 frames (Gemini Free Tier)")
+    st.write("🎥 Análisis Video - Máx 5 frames (con retry quota Gemini)")
     
     if st.session_state.video_step == 'upload':
         uploaded_video = st.file_uploader("Sube video...", type=["mp4", "mov", "avi"])
@@ -141,11 +144,9 @@ elif option == 'Video (Análisis)':
             st.session_state.fps = cap.get(cv2.CAP_PROP_FPS)
             cap.release()
             
-            # MOSTRAR METRICS
             col1, col2 = st.columns(2)
             col1.metric("Total Frames", st.session_state.total_frames)
             col2.metric("FPS", f"{st.session_state.fps:.1f}")
-            st.success(f"✅ Temp: {st.session_state.temp_file.split('/')[-1]}")
             
             if st.button("🎬 Plan de Análisis", type="primary"):
                 st.session_state.video_step = 'analyze'
@@ -156,31 +157,31 @@ elif option == 'Video (Análisis)':
         interval = max(1, st.session_state.total_frames // max_frames)
         
         st.info(f"""
-        📊 **PLAN AUTOMÁTICO** (5 req Gemini):
-        - Total: {st.session_state.total_frames} frames
-        - Analizo: **{max_frames} frames**
-        - Cada: **{interval}** frames
+        📊 **PLAN** (quota-friendly):
+        • Total: {st.session_state.total_frames} frames  
+        • Analizo: **{max_frames}** frames
+        • Intervalo: **{interval}** frames
+        • **{max_frames} requests** Gemini + retry automático
         """)
         
         col1, col2 = st.columns(2)
-        if col1.button("🚀 Procesar Ahora", type="primary"):
+        if col1.button("🚀 Procesar con Retry", type="primary"):
             st.session_state.video_step = 'process'
             st.session_state.video_results = []
             st.rerun()
         
         if col2.button("🔙 Nuevo Video"):
-            # LIMPIAR
             if 'temp_file' in st.session_state:
                 import os
                 os.unlink(st.session_state.temp_file)
-            for key in st.session_state.keys():
+            for key in list(st.session_state.keys()):
                 if key.startswith('video_'):
                     del st.session_state[key]
             st.session_state.video_step = 'upload'
             st.rerun()
     
     elif st.session_state.video_step == 'process':
-        st.markdown("## 🎯 PROCESANDO con Gemini...")
+        st.markdown("## 🎯 PROCESANDO (con anti-quota)...")
         max_frames = 5
         interval = max(1, st.session_state.total_frames // max_frames)
         
@@ -194,21 +195,46 @@ elif option == 'Video (Análisis)':
                 break
             
             if frame_count % interval == 0 and analyzed_count < max_frames:
-                st.write(f"**Frame {analyzed_count+1}/5** ({frame_count})")
+                st.markdown(f"**🔄 Frame {analyzed_count+1}/5** (abs {frame_count})")
                 
                 frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 image = Image.fromarray(frame_rgb)
                 
-                with st.spinner("🤖 Gemini analiza..."):
-                    response = model.generate_content([
-                        f"Describe brevemente esta escena (frame {analyzed_count+1}/5).", 
-                        image
-                    ])
+                # RETRY CON ESPERA QUOTA
+                max_retries = 3
+                response = None
+                for attempt in range(max_retries):
+                    try:
+                        with st.spinner(f"🤖 Gemini intento {attempt+1}/3..."):
+                            response = model.generate_content([
+                                f"Describe brevemente esta escena (frame {analyzed_count+1}/5 del video).", 
+                                image
+                            ])
+                        st.success(f"✅ Gemini OK (intento {attempt+1})")
+                        break
+                        
+                    except Exception as e:
+                        error_msg = str(e)
+                        st.warning(f"⚠️ Error: {error_msg[:80]}...")
+                        
+                        if "quota" in error_msg.lower() or "ResourceExhausted" in error_msg:
+                            if attempt < max_retries - 1:
+                                st.info("⏳ **Quota agotada** - Esperando 35s...")
+                                time.sleep(35)  # Reset quota Gemini
+                            else:
+                                st.error("💥 Quota agotada definitivamente")
+                                result = f"❌ Frame {frame_count}: Quota Gemini excedida"
+                                st.session_state.video_results.append(result)
+                                analyzed_count += 1
+                                break
+                        else:
+                            raise  # Otros errores no reintentan
                 
-                result = f"⏰ Frame {frame_count} ({frame_count/st.session_state.fps:.1f}s): {response.text}"
-                st.session_state.video_results.append(result)
-                st.success(f"✅ {analyzed_count+1}/5 listo!")
-                analyzed_count += 1
+                if response:
+                    result = f"⏰ Frame {frame_count} ({frame_count/st.session_state.fps:.1f}s): {response.text}"
+                    st.session_state.video_results.append(result)
+                    analyzed_count += 1
+                    st.balloons()
             
             frame_count += 1
         
@@ -220,19 +246,20 @@ elif option == 'Video (Análisis)':
         st.rerun()
     
     elif st.session_state.video_step == 'done':
-        st.balloons()
-        st.success("🎉 ¡COMPLETADO!")
+        st.markdown("---")
+        st.success("🎉 ¡ANÁLISIS COMPLETADO!")
         
-        st.subheader("📋 Resultados de Gemini:")
+        st.subheader("📋 Resultados Gemini:")
         for i, result in enumerate(st.session_state.video_results, 1):
             st.markdown(f"**{i}.** {result}")
         
-        if st.button("🔄 Nuevo Análisis", type="primary"):
-            for key in st.session_state.keys():
+        if st.button("🔄 Nuevo Video", type="primary"):
+            for key in list(st.session_state.keys()):
                 if key.startswith('video_'):
                     del st.session_state[key]
             st.session_state.video_step = 'upload'
             st.rerun()
+
 
 
 else:
