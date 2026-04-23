@@ -4,6 +4,7 @@ from PIL import Image  # Librería para manejar imágenes en Python
 import numpy as np
 import cv2 # Librería para Procesamiento Imagenes y Videos
 import tempfile #Librería para crear archivos temporales en disco
+import os # Importa módulo para operaciones de archivos (sistema operativo)
 
 # --- CONFIGURACIÓN INICIAL ---
 # st.secrets['GOOGLE_API_KEY'] busca la llave que guardamos en el Setting de Streamlit Cloud.
@@ -114,58 +115,98 @@ elif option == 'Audio (Transcripción)':
 
 # --- LÓGICA PARA VIDEO (Lo nuevo) ---
 elif option == 'Video (Análisis)':
-    st.write("Sube un video y analizaré algunos frames.")
+    st.write("Sube un video y analizaré algunos frames (máx. 5).")
 
+    # 1. CARGA DEL VIDEO
     uploaded_video = st.file_uploader("Sube un video...", type=["mp4", "mov", "avi"])
 
     if uploaded_video is not None:
+        # MOSTRAR VIDEO EN LA APP
         st.video(uploaded_video)
 
-        # Guardar temporalmente el video
-        # Creamos un archivo temporal en disco para guardar el video subido
-        tfile = tempfile.NamedTemporaryFile(delete=False)
-        # Escribimos los bytes del video en ese archivo temporal
-        tfile.write(uploaded_video.read())
+        # 2. CREAR ARCHIVO TEMPORAL EN DISCO (necesario para OpenCV)
+        # delete=False mantiene el archivo hasta que lo borremos manualmente
+        tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+        tfile.write(uploaded_video.read())  # Escribe bytes del video
+        tfile.close()  # Cierra el handle del archivo
 
-        # Abrimos el video usando OpenCV para poder leer frame por frame
+        # 3. ABRIR VIDEO CON OPENCV PARA LEER METADATOS
         cap = cv2.VideoCapture(tfile.name)
-
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Total frames del video
+        fps = cap.get(cv2.CAP_PROP_FPS)                         # Frames por segundo
+        duration = total_frames / fps if fps > 0 else 0         # Duración en segundos
+        
+        # MOSTRAR INFO TÉCNICA DEL VIDEO
+        with st.expander("📊 Datos del Video"):
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Total Frames", total_frames)
+            col2.metric("FPS", f"{fps:.1f}")
+            col3.metric("Duración", f"{duration:.1f}s")
+        
+        # 4. BOTÓN PARA CONFIGURAR ANÁLISIS
         if st.button("Analizar Video"):
-            with st.spinner("Procesando frames..."):
-                try:
-                    frame_count = 0
-                    results = []
-
-                    while cap.isOpened():
-                        ret, frame = cap.read()
-                        if not ret:
-                            break
-
-                        # Procesar cada cierto número de frames (para no saturar)
-                        # Si el video es 30 fps analizará solo 1 por segundo
-                        if frame_count % 30 == 0:
-                            # Convertir de OpenCV (BGR) a RGB
-                            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-                            # Convertir a imagen PIL
-                            image = Image.fromarray(frame_rgb)
-
-                            prompt = "Describe brevemente qué hay en esta escena."
-
-                            response = model.generate_content([prompt, image])
-                            results.append(response.text)
-
-                        frame_count += 1
-
-                    # Liberamos el video de memoria cuando terminamos de procesarlo
-                    cap.release()
-
-                    st.subheader("Resultados del video:")
-                    for i, r in enumerate(results):
-                        st.write(f"Frame {i}: {r}")
-
-                except Exception as e:
-                    st.error(f"Error en video: {e}")
+            # 5. CÁLCULO AUTOMÁTICO PARA MÁXIMO 5 FRAMES (EVITA QUOTA GEMINI)
+            max_frames = 5  # Límite fijo para free tier (5 req/min)
+            interval = max(1, total_frames // max_frames)  # Cada cuántos frames analizar
+            frames_to_analyze = min(max_frames, total_frames)  # Nunca más de 5
+            
+            # MOSTRAR PREVIEW ANTES DE PROCESAR
+            st.info(f"🔄 Analizaré **{frames_to_analyze} frames** máximo (de {total_frames} totales). "
+                   f"Intervalo automático: cada {interval} frames. "
+                   f"**{frames_to_analyze} requests** a Gemini.")
+            
+            # 6. CONFIRMACIÓN DEL USUARIO
+            if st.button(f"✅ Confirmar: Procesar {frames_to_analyze} frames (máx 5)", type="primary"):
+                with st.spinner("Procesando frames..."):
+                    try:
+                        results = []           # Lista para guardar descripciones
+                        frame_count = 0        # Contador global de frames
+                        analyzed_count = 0     # Contador de frames ANALIZADOS
+                        
+                        # 7. LOOP PRINCIPAL: LEER FRAME POR FRAME
+                        while cap.isOpened() and analyzed_count < max_frames:
+                            ret, frame = cap.read()  # Lee frame (ret=True si OK)
+                            if not ret:
+                                break
+                                
+                            # ¿Es este frame para analizar? (cada 'interval' frames)
+                            if frame_count % interval == 0 and analyzed_count < max_frames:
+                                # CONVERTIR FRAME PARA GEMINI
+                                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)  # BGR→RGB
+                                image = Image.fromarray(frame_rgb)                  # PIL Image
+                                
+                                # LLAMADA A GEMINI (1 request por frame)
+                                prompt = "Describe brevemente qué hay en esta escena."
+                                response = model.generate_content([prompt, image])
+                                
+                                # GUARDAR RESULTADO CON TIMESTAMP
+                                results.append(f"Frame {frame_count} ({frame_count/fps:.1f}s): {response.text}")
+                                
+                                analyzed_count += 1
+                                st.status_update(f"Procesado: {analyzed_count}/{max_frames}")
+                            
+                            frame_count += 1  # Siguiente frame
+                        
+                        # 8. LIMPIEZA DE MEMORIA Y DISCO
+                        cap.release()  # Libera VideoCapture
+                        
+                        # BORRAR ARCHIVO TEMPORAL (IMPORTANTE en Cloud)
+                        os.unlink(tfile.name)  # Elimina /tmp/tmpXYZ.mp4
+                        
+                        # 9. MOSTRAR RESULTADOS
+                        st.success(f"✅ Análisis completado: {len(results)} frames procesados.")
+                        st.subheader("Resultados del video:")
+                        for r in results:
+                            st.write(r)
+                            
+                    except Exception as e:
+                        st.error(f"Error en video: {e}")
+                        # LIMPIEZA EN CASO DE ERROR
+                        cap.release()
+                        import os
+                        os.unlink(tfile.name)
+        else:
+            st.info("👆 Haz clic en 'Analizar Video' para preview.")
 
 else:
     st.info("👆 Por favor, sube una imagen para comenzar.")
