@@ -114,46 +114,52 @@ elif option == 'Audio (Transcripción)':
                     st.error(f"Error en el audio: {e}")
 
 # --- LÓGICA PARA VIDEO (Lo nuevo) ---
+# --- LÓGICA PARA VIDEO (Versión DEBUG Completa) ---
 elif option == 'Video (Análisis)':
-    st.write("Sube un video y analizaré algunos frames (máx. 5).")
+    st.write("🔍 Sube un video y analizaré máximo 5 frames (para quota Gemini).")
 
-    # 1. CARGA DEL VIDEO
-    uploaded_video = st.file_uploader("Sube un video...", type=["mp4", "mov", "avi"])
+    # 1. CARGADOR DE VIDEO
+    uploaded_video = st.file_uploader("Elige un video...", type=["mp4", "mov", "avi"])
 
     if uploaded_video is not None:
         # MOSTRAR VIDEO EN LA APP
         st.video(uploaded_video)
 
-        # 2. CREAR ARCHIVO TEMPORAL EN DISCO (necesario para OpenCV)
-        # delete=False mantiene el archivo hasta que lo borremos manualmente
+        # 2. GUARDAR ARCHIVO TEMPORAL EN DISCO (OpenCV lo necesita)
+        st.info("📁 Creando archivo temporal...")
         tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        tfile.write(uploaded_video.read())  # Escribe bytes del video
-        tfile.close()  # Cierra el handle del archivo
+        tfile.write(uploaded_video.read())
+        tfile.close()
+        st.success(f"✅ Archivo temporal: {tfile.name}")
 
-        # 3. ABRIR VIDEO CON OPENCV PARA LEER METADATOS
+        # 3. LEER METADATOS CON OPENCV
         cap = cv2.VideoCapture(tfile.name)
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))  # Total frames del video
-        fps = cap.get(cv2.CAP_PROP_FPS)                         # Frames por segundo
-        duration = total_frames / fps if fps > 0 else 0         # Duración en segundos
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        duration = total_frames / fps if fps > 0 else 0
         
-        # MOSTRAR INFO TÉCNICA DEL VIDEO
-        with st.expander("📊 Datos del Video"):
-            col1, col2, col3 = st.columns(3)
+        # INFO TÉCNICA DEL VIDEO
+        with st.expander("📊 Datos Técnicos del Video"):
+            col1, col2, col3, col4 = st.columns(4)
             col1.metric("Total Frames", total_frames)
             col2.metric("FPS", f"{fps:.1f}")
             col3.metric("Duración", f"{duration:.1f}s")
-        
-        # 4. BOTÓN PARA CONFIGURAR ANÁLISIS
-        if st.button("Analizar Video"):
-            # 5. CÁLCULO AUTOMÁTICO PARA MÁXIMO 5 FRAMES (EVITA QUOTA GEMINI)
-            max_frames = 5  # Límite fijo para free tier (5 req/min)
-            interval = max(1, total_frames // max_frames)  # Cada cuántos frames analizar
-            frames_to_analyze = min(max_frames, total_frames)  # Nunca más de 5
+            col4.metric("Archivo Temp", tfile.name.split('/')[-1])
+
+        # 4. BOTÓN INICIAL
+        if st.button("🎬 Analizar Video", type="secondary"):
+            # 5. CÁLCULO AUTOMÁTICO (MÁXIMO 5 FRAMES)
+            max_frames = 5
+            interval = max(1, total_frames // max_frames)
+            frames_to_analyze = min(max_frames, total_frames)
             
-            # MOSTRAR PREVIEW ANTES DE PROCESAR
-            st.info(f"🔄 Analizaré **{frames_to_analyze} frames** máximo (de {total_frames} totales). "
-                   f"Intervalo automático: cada {interval} frames. "
-                   f"**{frames_to_analyze} requests** a Gemini.")
+            st.info(f"""
+            🔢 **Plan de análisis:**
+            - Total frames: **{total_frames}**
+            - Analizaré: **{frames_to_analyze} frames** (máx 5)
+            - Intervalo: cada **{interval}** frames
+            - **{frames_to_analyze} requests** a Gemini API
+            """)
             
             # 6. CONFIRMACIÓN FINAL
             if st.button(f"🚀 CONFIRMAR: Enviar {frames_to_analyze} frames a Gemini", type="primary"):
@@ -215,6 +221,7 @@ elif option == 'Video (Análisis)':
                 
                 # 8. SIEMPRE LIMPIAR
                 cap.release()
+                import os
                 os.unlink(tfile.name)
                 st.success("🧹 Archivo temporal eliminado.")
                 
