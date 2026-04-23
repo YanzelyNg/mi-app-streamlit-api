@@ -114,125 +114,101 @@ elif option == 'Audio (Transcripción)':
                     st.error(f"Error en el audio: {e}")
 
 # --- LÓGICA PARA VIDEO (Lo nuevo) ---
-# --- LÓGICA PARA VIDEO (Versión DEBUG Completa) ---
+# --- VIDEO CON SESSION STATE (SOLUCIONA BOTONES ANIDADOS) ---
 elif option == 'Video (Análisis)':
-    st.write("🔍 Sube un video y analizaré máximo 5 frames (para quota Gemini).")
-
-    # 1. CARGADOR DE VIDEO
-    uploaded_video = st.file_uploader("Elige un video...", type=["mp4", "mov", "avi"])
-
-    if uploaded_video is not None:
-        # MOSTRAR VIDEO EN LA APP
-        st.video(uploaded_video)
-
-        # 2. GUARDAR ARCHIVO TEMPORAL EN DISCO (OpenCV lo necesita)
-        st.info("📁 Creando archivo temporal...")
-        tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        tfile.write(uploaded_video.read())
-        tfile.close()
-        st.success(f"✅ Archivo temporal: {tfile.name}")
-
-        # 3. LEER METADATOS CON OPENCV
-        cap = cv2.VideoCapture(tfile.name)
+    if 'video_step' not in st.session_state:
+        st.session_state.video_step = 'upload'  # upload → analyze → process → done
+    
+    st.write("🎥 Análisis de Video (máx 5 frames)")
+    
+    if st.session_state.video_step == 'upload':
+        uploaded_video = st.file_uploader("Sube video...", type=["mp4", "mov", "avi"])
+        
+        if uploaded_video is not None:
+            st.video(uploaded_video)
+            
+            tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+            tfile.write(uploaded_video.read())
+            tfile.close()
+            st.session_state.temp_file = tfile.name
+            
+            cap = cv2.VideoCapture(tfile.name)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Frames", total_frames)
+            col2.metric("FPS", f"{fps:.1f}")
+            col3.metric("Temp File", st.session_state.temp_file.split('/')[-1])
+            
+            cap.release()
+            
+            if st.button("🎬 Analizar Video", type="primary"):
+                st.session_state.video_step = 'analyze'
+                st.rerun()
+    
+    elif st.session_state.video_step == 'analyze':
+        cap = cv2.VideoCapture(st.session_state.temp_file)
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS)
-        duration = total_frames / fps if fps > 0 else 0
+        max_frames = 5
+        interval = max(1, total_frames // max_frames)
         
-        # INFO TÉCNICA DEL VIDEO
-        with st.expander("📊 Datos Técnicos del Video"):
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Total Frames", total_frames)
-            col2.metric("FPS", f"{fps:.1f}")
-            col3.metric("Duración", f"{duration:.1f}s")
-            col4.metric("Archivo Temp", tfile.name.split('/')[-1])
-
-        # 4. BOTÓN INICIAL
-        if st.button("🎬 Analizar Video", type="secondary"):
-            # 5. CÁLCULO AUTOMÁTICO (MÁXIMO 5 FRAMES)
-            max_frames = 5
-            interval = max(1, total_frames // max_frames)
-            frames_to_analyze = min(max_frames, total_frames)
+        st.info(f"🔢 **Plan**: {max_frames} frames cada {interval} frames ({max_frames} requests Gemini)")
+        
+        if st.button("🚀 PROCESAR con Gemini", type="primary"):
+            st.session_state.video_step = 'process'
+            st.rerun()
+        
+        if st.button("🔙 Volver"):
+            st.session_state.video_step = 'upload'
+            st.rerun()
+    
+    elif st.session_state.video_step == 'process':
+        st.info("🎯 **Procesando...**")
+        
+        cap = cv2.VideoCapture(st.session_state.temp_file)
+        results = []
+        frame_count = 0
+        analyzed_count = 0
+        max_frames = 5
+        
+        while cap.isOpened() and analyzed_count < max_frames:
+            ret, frame = cap.read()
+            if not ret:
+                break
             
-            st.info(f"""
-            🔢 **Plan de análisis:**
-            - Total frames: **{total_frames}**
-            - Analizaré: **{frames_to_analyze} frames** (máx 5)
-            - Intervalo: cada **{interval}** frames
-            - **{frames_to_analyze} requests** a Gemini API
-            """)
+            if frame_count % (total_frames // max_frames) == 0 and analyzed_count < max_frames:
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                image = Image.fromarray(frame_rgb)
+                
+                with st.spinner(f"Gemini analiza frame {analyzed_count + 1}/5..."):
+                    response = model.generate_content([
+                        "Describe brevemente esta escena del video.", image
+                    ])
+                
+                results.append(f"Frame {frame_count}: {response.text}")
+                analyzed_count += 1
+                st.success(f"✅ Frame {analyzed_count}/5 listo!")
             
-            # 6. CONFIRMACIÓN FINAL
-            if st.button(f"🚀 CONFIRMAR: Enviar {frames_to_analyze} frames a Gemini", type="primary"):
-                st.info("🎯 Iniciando procesamiento DEBUG...")
-                
-                with st.spinner("Analizando frames con Gemini..."):
-                    try:
-                        results = []
-                        frame_count = 0
-                        analyzed_count = 0
-                        
-                        st.markdown("### 🐛 DEBUG en Vivo:")
-                        
-                        # 7. LOOP PRINCIPAL CON DEBUG
-                        while cap.isOpened() and analyzed_count < max_frames:
-                            ret, frame = cap.read()
-                            if not ret:
-                                st.write("**DEBUG: ✅ Fin del video**")
-                                break
-                            
-                            # ¿PROCESAR ESTE FRAME?
-                            if frame_count % interval == 0 and analyzed_count < max_frames:
-                                st.write(f"**Frame {frame_count}:** Enviando a Gemini...")
-                                
-                                # CONVERTIR PARA GEMINI
-                                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                                image = Image.fromarray(frame_rgb)
-                                
-                                prompt = "Describe brevemente qué hay en esta escena del video."
-                                
-                                # LLAMADA A GEMINI
-                                st.write("⏳ Esperando respuesta Gemini...")
-                                response = model.generate_content([prompt, image])
-                                
-                                # MOSTRAR RESULTADO INMEDIATO
-                                result_text = response.text
-                                st.write(f"**✅ Gemini:** {result_text}")
-                                
-                                # GUARDAR CON INFO
-                                results.append(f"⏰ Frame {frame_count} ({frame_count/fps:.1f}s): {result_text}")
-                                analyzed_count += 1
-                                
-                                st.success(f"📈 Progreso: {analyzed_count}/{max_frames}")
-                            
-                            frame_count += 1
-                        
-                        st.balloons()  # 🎈 Celebración!
-                        
-                    except Exception as e:
-                        st.error(f"💥 **ERROR:** {str(e)}")
-                        st.write(f"**Tipo:** {type(e).__name__}")
-                        st.write("**Traceback:** Revisa logs de Streamlit Cloud")
-                        
-                        # LIMPIEZA EMERGENCIA
-                        cap.release()
-                        import os
-                        os.unlink(tfile.name)
-                        st.stop()
-                
-                # 8. SIEMPRE LIMPIAR
-                cap.release()
-                import os
-                os.unlink(tfile.name)
-                st.success("🧹 Archivo temporal eliminado.")
-                
-                # 9. RESULTADOS FINALES
-                st.markdown("---")
-                st.subheader("🎥 RESUMEN FINAL")
-                if results:
-                    for i, result in enumerate(results, 1):
-                        st.markdown(f"**{i}.** {result}")
-                    st.balloons()
-                else:
-                    st.warning("⚠️ No se procesaron frames. Revisa DEBUG arriba.")
+            frame_count += 1
+        
+        cap.release()
+        import os
+        os.unlink(st.session_state.temp_file)
+        
+        st.session_state.video_step = 'done'
+        st.rerun()
+    
+    elif st.session_state.video_step == 'done':
+        st.success("🎉 ¡Análisis completado!")
+        st.subheader("📋 Resultados de Gemini:")
+        for result in st.session_state.get('video_results', []):
+            st.write(result)
+        
+        if st.button("🔄 Nuevo Video"):
+            for key in ['video_step', 'temp_file', 'video_results']:
+                del st.session_state[key]
+            st.rerun()
 else:
     st.info("👆 Por favor, sube una imagen para comenzar.")
