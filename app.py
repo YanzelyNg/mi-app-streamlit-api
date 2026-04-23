@@ -115,32 +115,73 @@ elif option == 'Audio (Transcripción)':
                     st.error(f"Error en el audio: {e}")
 
 # --- LÓGICA PARA VIDEO (Lo nuevo) ---
-# --- VIDEO CON SESSION STATE (SOLUCIONA BOTONES ANIDADOS) ---
-# --- VIDEO CON SESSION STATE (V2 - CORREGIDO) ---
-# --- VIDEO CON RETRY QUOTA (COMPLETO) ---
-# --- VIDEO CON RETRY QUOTA (COMPLETO) ---
+# --- VIDEO 2 FRAMES (PRIMERO + ÚLTIMO) ---
 elif option == 'Video (Análisis)':
-    st.write("🧪 DEBUG: 1 SOLO FRAME")
-    uploaded_video = st.file_uploader("Video...", type=["mp4"])
+    st.write("🎥 Análisis Smart: Frame 1 + Último (quota-safe)")
     
-    if uploaded_video and st.button("🔬 1 Frame Test"):
-        tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
-        tfile.write(uploaded_video.read())
-        tfile.close()
+    uploaded_video = st.file_uploader("Sube video...", type=["mp4", "mov", "avi"])
+    
+    if uploaded_video is not None:
+        st.video(uploaded_video)
         
-        cap = cv2.VideoCapture(tfile.name)
-        ret, frame = cap.read()
-        cap.release()
-        import os
-        os.unlink(tfile.name)
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🎬 Analizar 2 Frames", type="primary"):
+                st.session_state.video_process = True
+                st.rerun()
         
-        if ret:
-            image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-            response = model.generate_content(["Describe esta frame.", image])
-            st.success("✅ VIDEO OK!")
-            st.write(response.text)
-        else:
-            st.error("❌ No leyó frame")
+        if st.session_state.get('video_process', False):
+            st.info("🚀 Procesando 2 frames (1min espera quota)...")
+            
+            # ARCHIVO TEMPORAL
+            tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+            tfile.write(uploaded_video.read())
+            tfile.close()
+            
+            cap = cv2.VideoCapture(tfile.name)
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS)
+            
+            results = []
+            
+            # FRAME 1: PRIMERO
+            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            ret, frame = cap.read()
+            if ret:
+                image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                st.info("📱 Frame 1/2: INICIO video")
+                response = model.generate_content(["Describe esta escena (inicio video).", image])
+                results.append(f"⏰ **INICIO** (0s): {response.text}")
+                st.success("✅ Frame 1 OK")
+            
+            # ESPERA QUOTA
+            st.info("⏳ Esperando 60s (quota Gemini)...")
+            time.sleep(60)
+            
+            # FRAME 2: ÚLTIMO  
+            cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames - 1)
+            ret, frame = cap.read()
+            if ret:
+                image = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+                st.info("🏁 Frame 2/2: FINAL video")
+                response = model.generate_content(["Describe esta escena (final video).", image])
+                results.append(f"⏰ **FINAL** ({(total_frames-1)/fps:.1f}s): {response.text}")
+                st.success("✅ Frame 2 OK")
+            
+            # LIMPIEZA
+            cap.release()
+            import os
+            os.unlink(tfile.name)
+            
+            # RESULTADOS
+            st.session_state.video_process = False
+            st.balloons()
+            st.markdown("---")
+            st.subheader("🎬 RESUMEN VIDEO:")
+            for result in results:
+                st.markdown(f"• {result}")
+            
+            st.button("🔄 Nuevo Video")
 
 
 
