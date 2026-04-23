@@ -2,4 +2,4 @@ streamlit
 google-generativeai
 Pillow
 numpy
-opencv-python
+opencv-python-headless
