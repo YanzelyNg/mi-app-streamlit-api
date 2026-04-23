@@ -20,7 +20,7 @@ st.title("🔢 Contador de Objetos o Transcripción con IA")
 # Menú en la barra lateral para el taller
 option = st.sidebar.selectbox(
     '¿Qué quieres procesar hoy?',
-    ('Imagen (Contador)', 'Audio (Transcripción)')
+    ('Imagen (Contador)', 'Audio (Transcripción)', 'Video (Análisis)')
 )
 
 # --- CONECTANDO CON GEMINI ---
@@ -122,9 +122,12 @@ elif option == 'Video (Análisis)':
         st.video(uploaded_video)
 
         # Guardar temporalmente el video
+        # Creamos un archivo temporal en disco para guardar el video subido
         tfile = tempfile.NamedTemporaryFile(delete=False)
+        # Escribimos los bytes del video en ese archivo temporal
         tfile.write(uploaded_video.read())
 
+        # Abrimos el video usando OpenCV para poder leer frame por frame
         cap = cv2.VideoCapture(tfile.name)
 
         if st.button("Analizar Video"):
@@ -139,6 +142,7 @@ elif option == 'Video (Análisis)':
                             break
 
                         # Procesar cada cierto número de frames (para no saturar)
+                        # Si el video es 30 fps analizará solo 1 por segundo
                         if frame_count % 30 == 0:
                             # Convertir de OpenCV (BGR) a RGB
                             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -153,6 +157,7 @@ elif option == 'Video (Análisis)':
 
                         frame_count += 1
 
+                    # Liberamos el video de memoria cuando terminamos de procesarlo
                     cap.release()
 
                     st.subheader("Resultados del video:")
