@@ -23,7 +23,7 @@ if uploaded_file is not None:
     # Convertimos el archivo subido en un objeto de imagen de Python (PIL)
     image = Image.open(uploaded_file)
     # st.image la muestra en la pantalla de la app
-    st.image(image1, caption='Imagen cargada', use_column_width=True)
+    st.image(image, caption='Imagen cargada', use_column_width=True)
     
     # --- 4. EL BOTÓN DE ACCIÓN ---
     if st.button("Contar Objetos"):
